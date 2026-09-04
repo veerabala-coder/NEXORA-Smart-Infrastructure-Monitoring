@@ -22,6 +22,12 @@ const prisma = new PrismaClient({
 const app = express();
 
 app.use(cors());
+app.get("/health", (req, res) => {
+  res.json({
+    message: "NEXORA backend is working",
+    server: "Render",
+  });
+});
 app.use(express.json());
 
 // ===============================
