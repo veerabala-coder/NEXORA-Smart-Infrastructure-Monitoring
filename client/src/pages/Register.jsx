@@ -15,11 +15,8 @@ import axios from "axios";
 function Register() {
   const navigate = useNavigate();
 
-  const [showPassword, setShowPassword] =
-    useState(false);
-
-  const [showConfirmPassword, setShowConfirmPassword] =
-    useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -50,17 +47,12 @@ function Register() {
 
     // Check password
     if (formData.password.length < 8) {
-      setError(
-        "Password must contain at least 8 characters."
-      );
+      setError("Password must contain at least 8 characters.");
       return;
     }
 
     // Check confirm password
-    if (
-      formData.password !==
-      formData.confirmPassword
-    ) {
+    if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match.");
       return;
     }
@@ -69,7 +61,7 @@ function Register() {
 
     try {
       const response = await axios.post(
-        "http://localhost:5000/api/auth/register",
+        "https://nexora-smart-infrastructure-monitoring.onrender.com/api/auth/register",
         {
           name: formData.name,
           email: formData.email,
@@ -79,8 +71,7 @@ function Register() {
       );
 
       setSuccess(
-        response.data.message ||
-          "Registration successful!"
+        response.data.message || "Registration successful!"
       );
 
       setFormData({
@@ -95,22 +86,15 @@ function Register() {
       setTimeout(() => {
         navigate("/login");
       }, 1500);
-
     } catch (err) {
-      console.error(
-        "Registration error:",
-        err
-      );
+      console.error("Registration error:", err);
 
       if (err.response) {
         setError(
-          err.response.data.message ||
-            "Registration failed."
+          err.response.data.message || "Registration failed."
         );
       } else {
-        setError(
-          "Unable to connect to NEXORA server."
-        );
+        setError("Unable to connect to NEXORA server.");
       }
     } finally {
       setLoading(false);
@@ -342,9 +326,7 @@ function Register() {
                   <button
                     type="button"
                     onClick={() =>
-                      setShowPassword(
-                        !showPassword
-                      )
+                      setShowPassword(!showPassword)
                     }
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
                   >
@@ -388,9 +370,7 @@ function Register() {
                     }
                     name="confirmPassword"
                     placeholder="Confirm your password"
-                    value={
-                      formData.confirmPassword
-                    }
+                    value={formData.confirmPassword}
                     onChange={handleChange}
                     required
                     className="w-full rounded-xl border border-slate-800 bg-slate-900 py-3 pl-11 pr-12 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-500"
