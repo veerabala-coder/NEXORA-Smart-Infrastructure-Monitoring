@@ -13,18 +13,13 @@ import axios from "axios";
 function Login() {
   const navigate = useNavigate();
 
-  const [showPassword, setShowPassword] =
-    useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  // ======================================
-  // LOGIN
-  // ======================================
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -34,7 +29,7 @@ function Login() {
 
     try {
       const response = await axios.post(
-        "http://localhost:5000/api/auth/login",
+        `${import.meta.env.VITE_API_URL}/auth/login`,
         {
           email,
           password,
@@ -43,26 +38,17 @@ function Login() {
 
       const { token, user } = response.data;
 
-      // Save JWT token
-      localStorage.setItem(
-        "nexora_token",
-        token
-      );
+      localStorage.setItem("nexora_token", token);
 
-      // Save logged-in user
       localStorage.setItem(
         "nexora_user",
         JSON.stringify(user)
       );
 
-      // Go to dashboard
       navigate("/dashboard");
 
     } catch (err) {
-      console.error(
-        "Login error:",
-        err
-      );
+      console.error("Login error:", err);
 
       if (err.response) {
         setError(
@@ -85,16 +71,13 @@ function Login() {
 
       <div className="grid min-h-screen lg:grid-cols-2">
 
-        {/* ==================================
-            LEFT SIDE
-        ================================== */}
+        {/* LEFT SIDE */}
 
         <div className="hidden flex-col justify-between bg-slate-900 p-10 lg:flex">
 
           {/* LOGO */}
 
           <div>
-
             <h1 className="text-3xl font-bold text-cyan-400">
               NEXORA
             </h1>
@@ -102,7 +85,6 @@ function Login() {
             <p className="mt-2 text-sm text-slate-500">
               Infrastructure Intelligence Platform
             </p>
-
           </div>
 
           {/* DESCRIPTION */}
@@ -115,22 +97,18 @@ function Login() {
             />
 
             <h2 className="text-4xl font-bold leading-tight">
-
               Smart monitoring for
 
               <span className="text-cyan-400">
                 {" "}modern infrastructure.
               </span>
-
             </h2>
 
             <p className="mt-6 leading-7 text-slate-400">
-
               Monitor infrastructure projects,
               track progress, manage risks and
               make data-driven decisions from
               one intelligent platform.
-
             </p>
 
           </div>
@@ -143,9 +121,7 @@ function Login() {
 
         </div>
 
-        {/* ==================================
-            RIGHT SIDE
-        ================================== */}
+        {/* RIGHT SIDE */}
 
         <div className="flex items-center justify-center px-6 py-12">
 
@@ -165,9 +141,7 @@ function Login() {
 
             </div>
 
-            {/* ==================================
-                HEADING
-            ================================== */}
+            {/* HEADING */}
 
             <div className="mb-8">
 
@@ -185,23 +159,15 @@ function Login() {
 
             </div>
 
-            {/* ==================================
-                ERROR MESSAGE
-            ================================== */}
+            {/* ERROR */}
 
             {error && (
-
               <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-
                 {error}
-
               </div>
-
             )}
 
-            {/* ==================================
-                LOGIN FORM
-            ================================== */}
+            {/* LOGIN FORM */}
 
             <form
               onSubmit={handleLogin}
@@ -268,14 +234,10 @@ function Login() {
                     className="w-full rounded-xl border border-slate-800 bg-slate-900 py-3 pl-11 pr-12 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-500"
                   />
 
-                  {/* SHOW PASSWORD */}
-
                   <button
                     type="button"
                     onClick={() =>
-                      setShowPassword(
-                        !showPassword
-                      )
+                      setShowPassword(!showPassword)
                     }
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
                   >
@@ -292,13 +254,9 @@ function Login() {
 
               </div>
 
-              {/* ==================================
-                  OPTIONS
-              ================================== */}
+              {/* OPTIONS */}
 
               <div className="flex items-center justify-between">
-
-                {/* REMEMBER ME */}
 
                 <label className="flex items-center gap-2 text-sm text-slate-400">
 
@@ -310,8 +268,6 @@ function Login() {
                   Remember me
 
                 </label>
-
-                {/* FORGOT PASSWORD */}
 
                 <button
                   type="button"
@@ -327,27 +283,21 @@ function Login() {
 
               </div>
 
-              {/* ==================================
-                  LOGIN BUTTON
-              ================================== */}
+              {/* LOGIN BUTTON */}
 
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full rounded-xl bg-cyan-500 py-3.5 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
-
                 {loading
                   ? "Signing in..."
                   : "Sign In"}
-
               </button>
 
             </form>
 
-            {/* ==================================
-                REGISTER
-            ================================== */}
+            {/* REGISTER */}
 
             <p className="mt-8 text-center text-sm text-slate-500">
 
@@ -365,9 +315,7 @@ function Login() {
 
             </p>
 
-            {/* ==================================
-                SECURITY
-            ================================== */}
+            {/* SECURITY */}
 
             <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-600">
 
