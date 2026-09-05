@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   FolderKanban,
@@ -8,6 +12,9 @@ import {
   IndianRupee,
   CalendarClock,
   RefreshCw,
+  WalletCards,
+  ShieldAlert,
+  CheckCircle2,
   ArrowRight,
 } from "lucide-react";
 
@@ -24,45 +31,47 @@ import {
 import api from "../api/axios.js";
 
 function Dashboard() {
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [projects, setProjects] =
+    useState([]);
 
-  // ==========================================
-  // FETCH PROJECTS
-  // ==========================================
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
 
   const fetchProjects = async () => {
     try {
       setLoading(true);
 
-      const token = localStorage.getItem("nexora_token");
+      const response =
+        await api.get("/projects");
 
-      if (!token) {
-        localStorage.removeItem("nexora_user");
-        window.location.href = "/login";
-        return;
-      }
+      setProjects(
+        response.data.projects || []
+      );
 
-      const response = await api.get("/projects", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      setProjects(response.data.projects || []);
     } catch (error) {
-      console.error("Dashboard fetch error:", error);
+      console.error(
+        "Dashboard fetch error:",
+        error
+      );
 
-      if (error.response?.status === 401) {
-        localStorage.removeItem("nexora_token");
-        localStorage.removeItem("nexora_user");
+      if (
+        error.response?.status === 401
+      ) {
+        localStorage.removeItem(
+          "nexora_token"
+        );
 
-        window.location.href = "/login";
-        return;
+        localStorage.removeItem(
+          "nexora_user"
+        );
+
+        window.location.href =
+          "/login";
       }
 
-      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -72,248 +81,178 @@ function Dashboard() {
     fetchProjects();
   }, []);
 
-  // ==========================================
-  // REFRESH
-  // ==========================================
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-
-    await fetchProjects();
-
-    setRefreshing(false);
-  };
-
-  // ==========================================
-  // DASHBOARD STATISTICS
-  // ==========================================
-
   const statistics = useMemo(() => {
-    const total = projects.length;
 
-    const active = projects.filter(
-      (project) =>
-        project.status === "ON_TRACK" ||
-        project.status === "AT_RISK"
-    ).length;
+    const total =
+      projects.length;
 
-    const delayed = projects.filter(
-      (project) => project.status === "DELAYED"
-    ).length;
+    const active =
+      projects.filter(
+        (p) =>
+          p.status ===
+            "ON_TRACK" ||
+          p.status ===
+            "AT_RISK"
+      ).length;
 
-    const completed = projects.filter(
-      (project) => project.status === "COMPLETED"
-    ).length;
+    const completed =
+      projects.filter(
+        (p) =>
+          p.status ===
+          "COMPLETED"
+      ).length;
 
-    const onTrack = projects.filter(
-      (project) => project.status === "ON_TRACK"
-    ).length;
+    const delayed =
+      projects.filter(
+        (p) =>
+          p.status ===
+          "DELAYED"
+      ).length;
 
-    const atRisk = projects.filter(
-      (project) => project.status === "AT_RISK"
-    ).length;
+    const atRisk =
+      projects.filter(
+        (p) =>
+          p.status ===
+          "AT_RISK"
+      ).length;
 
     const averageProgress =
       total > 0
         ? Math.round(
             projects.reduce(
-              (sum, project) =>
-                sum + Number(project.progress || 0),
+              (sum, p) =>
+                sum +
+                Number(
+                  p.progress || 0
+                ),
               0
             ) / total
           )
         : 0;
 
-    const totalBudget = projects.reduce(
-      (sum, project) =>
-        sum + Number(project.budget || 0),
-      0
-    );
+    const approvedBudget =
+      projects.reduce(
+        (sum, p) =>
+          sum +
+          Number(
+            p.approvedBudget ??
+              p.budget ??
+              0
+          ),
+        0
+      );
+
+    const estimatedCost =
+      projects.reduce(
+        (sum, p) =>
+          sum +
+          Number(
+            p.estimatedFinalCost ??
+              p.budget ??
+              0
+          ),
+        0
+      );
+
+    const additionalFunding =
+      projects.reduce(
+        (sum, p) =>
+          sum +
+          Number(
+            p.additionalFunding ||
+              0
+          ),
+        0
+      );
+
+    const fundingProjects =
+      projects.filter(
+        (p) =>
+          Number(
+            p.additionalFunding ||
+              0
+          ) > 0
+      ).length;
 
     return {
       total,
       active,
-      delayed,
       completed,
-      onTrack,
+      delayed,
       atRisk,
       averageProgress,
-      totalBudget,
+      approvedBudget,
+      estimatedCost,
+      additionalFunding,
+      fundingProjects,
     };
+
   }, [projects]);
 
-  // ==========================================
-  // UPCOMING DEADLINES
-  // ==========================================
+  const formatMoney = (value) => {
+    const amount =
+      Number(value || 0);
 
-  const upcomingProjects = useMemo(() => {
-    const today = new Date();
-
-    return projects
-      .filter((project) => {
-        if (project.status === "COMPLETED") {
-          return false;
-        }
-
-        const endDate = new Date(project.endDate);
-
-        return endDate >= today;
-      })
-      .sort(
-        (a, b) =>
-          new Date(a.endDate) -
-          new Date(b.endDate)
-      )
-      .slice(0, 5);
-  }, [projects]);
-
-  // ==========================================
-  // RECENT PROJECTS
-  // ==========================================
-
-  const recentProjects = useMemo(() => {
-    return [...projects]
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt) -
-          new Date(a.createdAt)
-      )
-      .slice(0, 5);
-  }, [projects]);
-
-  // ==========================================
-  // CHART DATA
-  // ==========================================
-
-  const chartData = useMemo(() => {
-    return projects.slice(0, 8).map((project) => ({
-      name:
-        project.name.length > 18
-          ? project.name.substring(0, 18) + "..."
-          : project.name,
-      progress: Number(project.progress || 0),
-    }));
-  }, [projects]);
-
-  // ==========================================
-  // STATUS STYLE
-  // ==========================================
-
-  const getStatusStyle = (status) => {
-    switch (status) {
-      case "ON_TRACK":
-        return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
-
-      case "AT_RISK":
-        return "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
-
-      case "DELAYED":
-        return "bg-red-500/10 text-red-400 border-red-500/20";
-
-      case "COMPLETED":
-        return "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
-
-      default:
-        return "bg-slate-500/10 text-slate-400 border-slate-500/20";
+    if (
+      amount >= 10000000
+    ) {
+      return `₹${(
+        amount /
+        10000000
+      ).toFixed(1)} Cr`;
     }
+
+    if (
+      amount >= 100000
+    ) {
+      return `₹${(
+        amount /
+        100000
+      ).toFixed(1)} L`;
+    }
+
+    return `₹${amount.toLocaleString(
+      "en-IN"
+    )}`;
   };
 
-  // ==========================================
-  // FORMAT STATUS
-  // ==========================================
+  const chartData =
+    projects
+      .slice(0, 8)
+      .map((project) => ({
+        name:
+          project.name.length >
+          18
+            ? project.name.slice(
+                0,
+                18
+              ) + "..."
+            : project.name,
 
-  const formatStatus = (status) => {
-    return status
-      .replaceAll("_", " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (letter) =>
-        letter.toUpperCase()
-      );
-  };
+        progress:
+          Number(
+            project.progress ||
+              0
+          ),
+      }));
 
-  // ==========================================
-  // FORMAT MONEY
-  // ==========================================
-
-  const formatBudget = (amount) => {
-    if (!amount) {
-      return "₹0";
-    }
-
-    if (amount >= 10000000) {
-      return `₹${(amount / 10000000).toFixed(1)} Cr`;
-    }
-
-    if (amount >= 100000) {
-      return `₹${(amount / 100000).toFixed(1)} L`;
-    }
-
-    return `₹${amount.toLocaleString("en-IN")}`;
-  };
-
-  // ==========================================
-  // DAYS REMAINING
-  // ==========================================
-
-  const getDaysRemaining = (date) => {
-    const today = new Date();
-    const endDate = new Date(date);
-
-    const difference =
-      endDate.getTime() - today.getTime();
-
-    return Math.ceil(
-      difference / (1000 * 60 * 60 * 24)
+  const fundingProjects =
+    projects.filter(
+      (p) =>
+        Number(
+          p.additionalFunding ||
+            0
+        ) > 0
     );
-  };
-
-  // ==========================================
-  // STAT CARD
-  // ==========================================
-
-  const StatCard = ({
-    title,
-    value,
-    icon: Icon,
-    description,
-    iconStyle,
-  }) => {
-    return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg transition hover:border-cyan-500/30">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm text-slate-400">
-              {title}
-            </p>
-
-            <h2 className="mt-2 text-3xl font-bold text-white">
-              {value}
-            </h2>
-
-            <p className="mt-3 text-xs text-slate-500">
-              {description}
-            </p>
-          </div>
-
-          <div
-            className={`rounded-xl p-3 ${iconStyle}`}
-          >
-            <Icon size={22} />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ==========================================
-  // LOADING
-  // ==========================================
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 px-6 py-8 text-white lg:px-10">
+      <div className="min-h-screen bg-slate-950 px-6 py-8 text-white">
+
         <div className="flex min-h-[70vh] items-center justify-center">
+
           <div className="text-center">
+
             <RefreshCw
               size={35}
               className="mx-auto animate-spin text-cyan-400"
@@ -322,15 +261,14 @@ function Dashboard() {
             <p className="mt-4 text-slate-400">
               Loading NEXORA intelligence...
             </p>
+
           </div>
+
         </div>
+
       </div>
     );
   }
-
-  // ==========================================
-  // MAIN DASHBOARD
-  // ==========================================
 
   return (
     <div className="min-h-screen bg-slate-950 px-6 py-8 text-white lg:px-10">
@@ -338,7 +276,9 @@ function Dashboard() {
       {/* HEADER */}
 
       <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
+
         <div>
+
           <p className="text-sm font-semibold text-cyan-400">
             NEXORA INTELLIGENCE
           </p>
@@ -349,317 +289,392 @@ function Dashboard() {
 
           <p className="mt-2 text-slate-400">
             Real-time overview of infrastructure
-            project performance.
+            project performance and financial health.
           </p>
+
         </div>
 
         <button
-          onClick={handleRefresh}
+          onClick={async () => {
+            setRefreshing(true);
+            await fetchProjects();
+            setRefreshing(false);
+          }}
           disabled={refreshing}
-          className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-5 py-3 font-medium text-slate-300 transition hover:border-cyan-500 hover:text-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-5 py-3 font-medium text-slate-300 hover:border-cyan-500 hover:text-cyan-400"
         >
+
           <RefreshCw
             size={18}
             className={
-              refreshing ? "animate-spin" : ""
+              refreshing
+                ? "animate-spin"
+                : ""
             }
           />
 
           {refreshing
             ? "Refreshing..."
             : "Refresh Data"}
+
         </button>
+
       </div>
 
-      {/* STAT CARDS */}
+      {/* MAIN STATS */}
 
-      <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
 
         <StatCard
           title="Total Projects"
-          value={statistics.total}
+          value={
+            statistics.total
+          }
           icon={FolderKanban}
-          description="Projects registered in NEXORA"
-          iconStyle="bg-cyan-500/10 text-cyan-400"
+          description="Projects registered"
         />
 
         <StatCard
           title="Active Projects"
-          value={statistics.active}
+          value={
+            statistics.active
+          }
           icon={Activity}
           description="On Track + At Risk"
-          iconStyle="bg-emerald-500/10 text-emerald-400"
         />
 
         <StatCard
-          title="Delayed Projects"
-          value={statistics.delayed}
+          title="Completed"
+          value={
+            statistics.completed
+          }
+          icon={CheckCircle2}
+          description="Successfully completed"
+        />
+
+        <StatCard
+          title="Delayed"
+          value={
+            statistics.delayed
+          }
           icon={AlertTriangle}
-          description="Projects requiring attention"
-          iconStyle="bg-red-500/10 text-red-400"
+          description="Require attention"
         />
 
         <StatCard
-          title="Average Progress"
-          value={`${statistics.averageProgress}%`}
-          icon={TrendingUp}
-          description="Overall project completion"
-          iconStyle="bg-purple-500/10 text-purple-400"
+          title="At Risk"
+          value={
+            statistics.atRisk
+          }
+          icon={ShieldAlert}
+          description="Risk detected"
         />
 
       </div>
 
-      {/* SECONDARY METRICS */}
+      {/* FINANCIAL STATS */}
 
-      <div className="mt-5 grid gap-5 md:grid-cols-3">
+      <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-          <div className="flex items-center gap-3">
+        <FinancialCard
+          title="Approved Budget"
+          value={formatMoney(
+            statistics.approvedBudget
+          )}
+          icon={IndianRupee}
+        />
 
-            <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
-              <IndianRupee size={20} />
-            </div>
+        <FinancialCard
+          title="Estimated Final Cost"
+          value={formatMoney(
+            statistics.estimatedCost
+          )}
+          icon={TrendingUp}
+        />
 
-            <div>
-              <p className="text-sm text-slate-400">
-                Total Project Budget
-              </p>
+        <FinancialCard
+          title="Additional Funding"
+          value={formatMoney(
+            statistics.additionalFunding
+          )}
+          icon={WalletCards}
+          danger={
+            statistics.additionalFunding >
+            0
+          }
+        />
 
-              <p className="mt-1 text-2xl font-bold">
-                {formatBudget(statistics.totalBudget)}
-              </p>
-            </div>
-
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-xl bg-emerald-500/10 p-3 text-emerald-400">
-              <Activity size={20} />
-            </div>
-
-            <div>
-              <p className="text-sm text-slate-400">
-                On Track
-              </p>
-
-              <p className="mt-1 text-2xl font-bold">
-                {statistics.onTrack}
-              </p>
-            </div>
-
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-xl bg-yellow-500/10 p-3 text-yellow-400">
-              <AlertTriangle size={20} />
-            </div>
-
-            <div>
-              <p className="text-sm text-slate-400">
-                At Risk
-              </p>
-
-              <p className="mt-1 text-2xl font-bold">
-                {statistics.atRisk}
-              </p>
-            </div>
-
-          </div>
-        </div>
+        <FinancialCard
+          title="Funding Projects"
+          value={
+            statistics.fundingProjects
+          }
+          icon={AlertTriangle}
+          danger={
+            statistics.fundingProjects >
+            0
+          }
+        />
 
       </div>
 
-      {/* CHART + STATUS */}
+      {/* FUNDING ALERT */}
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-3">
+      {statistics.fundingProjects >
+        0 && (
 
-        {/* PROJECT PERFORMANCE */}
+        <div className="mt-5 rounded-2xl border border-red-500/30 bg-red-500/10 p-6">
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 xl:col-span-2">
+          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
 
-          <div className="flex items-center justify-between">
+            <div className="flex items-start gap-4">
 
-            <div>
-              <h2 className="text-lg font-bold">
-                Project Performance
-              </h2>
+              <div className="rounded-xl bg-red-500/10 p-3 text-red-400">
 
-              <p className="mt-1 text-sm text-slate-500">
-                Current progress of infrastructure
-                projects
-              </p>
-            </div>
+                <ShieldAlert
+                  size={25}
+                />
 
-          </div>
-
-          <div className="mt-6 h-80">
-
-            {chartData.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-slate-500">
-                No project data available.
               </div>
-            ) : (
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <BarChart data={chartData}>
 
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="#1e293b"
-                  />
+              <div>
 
-                  <XAxis
-                    dataKey="name"
-                    stroke="#64748b"
-                    tick={{ fontSize: 11 }}
-                  />
-
-                  <YAxis
-                    stroke="#64748b"
-                    domain={[0, 100]}
-                    tick={{ fontSize: 11 }}
-                  />
-
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#0f172a",
-                      border: "1px solid #334155",
-                      borderRadius: "12px",
-                      color: "#fff",
-                    }}
-                    formatter={(value) => [
-                      `${value}%`,
-                      "Progress",
-                    ]}
-                  />
-
-                  <Bar
-                    dataKey="progress"
-                    fill="#06b6d4"
-                    radius={[6, 6, 0, 0]}
-                  />
-
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-
-          </div>
-        </div>
-
-        {/* STATUS OVERVIEW */}
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <h2 className="text-lg font-bold">
-            Status Overview
-          </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Current project health
-          </p>
-
-          <div className="mt-8 flex justify-center">
-
-            <div className="relative flex h-40 w-40 items-center justify-center rounded-full border-[12px] border-cyan-500/20">
-
-              <div className="text-center">
-
-                <p className="text-3xl font-bold text-cyan-400">
-
-                  {statistics.total > 0
-                    ? Math.round(
-                        (statistics.onTrack /
-                          statistics.total) *
-                          100
-                      )
-                    : 0}
-
-                  %
+                <p className="text-sm font-semibold text-red-400">
+                  🚨 FUNDING ALERTS
                 </p>
 
-                <p className="text-xs text-slate-500">
-                  On Track
+                <h2 className="mt-1 text-xl font-bold">
+                  {
+                    statistics.fundingProjects
+                  }{" "}
+                  projects require
+                  additional funding
+                </h2>
+
+                <p className="mt-2 text-sm text-slate-400">
+                  Total additional funding
+                  required:
+                </p>
+
+                <p className="mt-1 text-2xl font-bold text-red-400">
+                  {formatMoney(
+                    statistics.additionalFunding
+                  )}
                 </p>
 
               </div>
 
             </div>
 
-          </div>
-
-          <div className="mt-8 space-y-4">
-
-            <div className="flex items-center justify-between">
-
-              <span className="flex items-center gap-2 text-sm text-slate-400">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                On Track
-              </span>
-
-              <span className="font-semibold">
-                {statistics.onTrack}
-              </span>
-
-            </div>
-
-            <div className="flex items-center justify-between">
-
-              <span className="flex items-center gap-2 text-sm text-slate-400">
-                <span className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
-                At Risk
-              </span>
-
-              <span className="font-semibold">
-                {statistics.atRisk}
-              </span>
-
-            </div>
-
-            <div className="flex items-center justify-between">
-
-              <span className="flex items-center gap-2 text-sm text-slate-400">
-                <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-                Delayed
-              </span>
-
-              <span className="font-semibold">
-                {statistics.delayed}
-              </span>
-
-            </div>
-
-            <div className="flex items-center justify-between">
-
-              <span className="flex items-center gap-2 text-sm text-slate-400">
-                <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" />
-                Completed
-              </span>
-
-              <span className="font-semibold">
-                {statistics.completed}
-              </span>
-
-            </div>
+            <button
+              onClick={() => {
+                window.location.href =
+                  "/alerts?filter=FUNDING";
+              }}
+              className="flex items-center justify-center gap-2 rounded-xl bg-red-500 px-5 py-3 font-semibold text-white hover:bg-red-400"
+            >
+              View Funding Alerts
+              <ArrowRight
+                size={17}
+              />
+            </button>
 
           </div>
 
         </div>
 
-      </div>
+      )}
 
-      {/* UPCOMING DEADLINES */}
+      {/* CHART */}
 
       <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900 p-6">
 
         <div className="flex items-center justify-between">
+
+          <div>
+
+            <h2 className="text-lg font-bold">
+              Project Performance
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Current project completion levels
+            </p>
+
+          </div>
+
+          <span className="text-sm text-cyan-400">
+            Average:{" "}
+            {
+              statistics.averageProgress
+            }%
+          </span>
+
+        </div>
+
+        <div className="mt-6 h-80">
+
+          {chartData.length ===
+          0 ? (
+
+            <div className="flex h-full items-center justify-center text-slate-500">
+              No project data available.
+            </div>
+
+          ) : (
+
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+            >
+
+              <BarChart
+                data={chartData}
+              >
+
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#1e293b"
+                />
+
+                <XAxis
+                  dataKey="name"
+                  stroke="#64748b"
+                  tick={{
+                    fontSize: 11,
+                  }}
+                />
+
+                <YAxis
+                  domain={[0, 100]}
+                  stroke="#64748b"
+                />
+
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor:
+                      "#0f172a",
+                    border:
+                      "1px solid #334155",
+                    borderRadius:
+                      "12px",
+                    color: "#fff",
+                  }}
+                  formatter={(
+                    value
+                  ) => [
+                    `${value}%`,
+                    "Progress",
+                  ]}
+                />
+
+                <Bar
+                  dataKey="progress"
+                  fill="#06b6d4"
+                  radius={[
+                    6,
+                    6,
+                    0,
+                    0,
+                  ]}
+                />
+
+              </BarChart>
+
+            </ResponsiveContainer>
+
+          )}
+
+        </div>
+
+      </div>
+
+      {/* FUNDING PROJECTS */}
+
+      {fundingProjects.length >
+        0 && (
+
+        <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+
+          <div className="flex items-center justify-between">
+
+            <div>
+
+              <h2 className="text-lg font-bold">
+                Projects Requiring Funding
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Projects projected to exceed
+                approved budgets
+              </p>
+
+            </div>
+
+            <WalletCards
+              size={22}
+              className="text-red-400"
+            />
+
+          </div>
+
+          <div className="mt-5 space-y-3">
+
+            {fundingProjects
+              .slice(0, 5)
+              .map((project) => (
+
+                <div
+                  key={project.id}
+                  className="flex flex-col justify-between gap-4 rounded-xl border border-red-500/10 bg-red-500/5 p-4 md:flex-row md:items-center"
+                >
+
+                  <div>
+
+                    <p className="font-semibold">
+                      {project.name}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {project.location}
+                    </p>
+
+                  </div>
+
+                  <div className="text-left md:text-right">
+
+                    <p className="text-xs text-slate-500">
+                      Additional Funding
+                    </p>
+
+                    <p className="font-bold text-red-400">
+                      {formatMoney(
+                        project.additionalFunding
+                      )}
+                    </p>
+
+                  </div>
+
+                </div>
+
+              ))}
+
+          </div>
+
+        </div>
+
+      )}
+
+      {/* DEADLINES */}
+
+      <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+
+        <div className="flex items-center gap-3">
+
+          <CalendarClock
+            size={22}
+            className="text-cyan-400"
+          />
 
           <div>
 
@@ -668,328 +683,174 @@ function Dashboard() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Projects approaching their target
-              completion date
+              Projects approaching completion
             </p>
 
           </div>
 
-          <CalendarClock
-            size={22}
-            className="text-cyan-400"
-          />
-
         </div>
 
-        <div className="mt-5 overflow-x-auto">
+        <div className="mt-5 space-y-3">
 
-          {upcomingProjects.length === 0 ? (
-            <p className="py-6 text-center text-slate-500">
-              No upcoming deadlines.
-            </p>
-          ) : (
+          {projects
+            .filter(
+              (p) =>
+                p.status !==
+                "COMPLETED"
+            )
+            .sort(
+              (a, b) =>
+                new Date(
+                  a.endDate
+                ) -
+                new Date(
+                  b.endDate
+                )
+            )
+            .slice(0, 5)
+            .map((project) => {
 
-            <table className="w-full min-w-[650px] text-left">
+              const days = Math.ceil(
+                (
+                  new Date(
+                    project.endDate
+                  ).getTime() -
+                  new Date().getTime()
+                ) /
+                  (1000 *
+                    60 *
+                    60 *
+                    24)
+              );
 
-              <thead>
+              return (
+                <div
+                  key={project.id}
+                  className="flex flex-col justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4 md:flex-row md:items-center"
+                >
 
-                <tr className="border-b border-slate-800 text-xs uppercase text-slate-500">
+                  <div>
 
-                  <th className="pb-3">
-                    Project
-                  </th>
+                    <p className="font-medium">
+                      {project.name}
+                    </p>
 
-                  <th className="pb-3">
-                    Status
-                  </th>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {project.location}
+                    </p>
 
-                  <th className="pb-3">
-                    Progress
-                  </th>
+                  </div>
 
-                  <th className="pb-3">
-                    Deadline
-                  </th>
+                  <div className="text-sm">
 
-                  <th className="pb-3">
-                    Remaining
-                  </th>
-
-                </tr>
-
-              </thead>
-
-              <tbody>
-
-                {upcomingProjects.map((project) => {
-
-                  const days =
-                    getDaysRemaining(
-                      project.endDate
-                    );
-
-                  return (
-
-                    <tr
-                      key={project.id}
-                      className="border-b border-slate-800/70"
+                    <span
+                      className={
+                        days <= 7
+                          ? "font-bold text-red-400"
+                          : days <=
+                            30
+                          ? "font-bold text-yellow-400"
+                          : "text-emerald-400"
+                      }
                     >
+                      {days} days
+                    </span>
 
-                      <td className="py-4">
+                  </div>
 
-                        <p className="font-medium text-white">
-                          {project.name}
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          {project.location}
-                        </p>
-
-                      </td>
-
-                      <td className="py-4">
-
-                        <span
-                          className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
-                            project.status
-                          )}`}
-                        >
-                          {formatStatus(
-                            project.status
-                          )}
-                        </span>
-
-                      </td>
-
-                      <td className="py-4">
-
-                        <div className="flex items-center gap-3">
-
-                          <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-800">
-
-                            <div
-                              className="h-full rounded-full bg-cyan-500"
-                              style={{
-                                width: `${project.progress}%`,
-                              }}
-                            />
-
-                          </div>
-
-                          <span className="text-xs text-slate-400">
-                            {project.progress}%
-                          </span>
-
-                        </div>
-
-                      </td>
-
-                      <td className="py-4 text-sm text-slate-400">
-
-                        {new Date(
-                          project.endDate
-                        ).toLocaleDateString()}
-
-                      </td>
-
-                      <td className="py-4">
-
-                        <span
-                          className={`text-sm font-semibold ${
-                            days <= 7
-                              ? "text-red-400"
-                              : days <= 30
-                              ? "text-yellow-400"
-                              : "text-emerald-400"
-                          }`}
-                        >
-                          {days} day
-                          {days !== 1
-                            ? "s"
-                            : ""}
-                        </span>
-
-                      </td>
-
-                    </tr>
-
-                  );
-                })}
-
-              </tbody>
-
-            </table>
-
-          )}
+                </div>
+              );
+            })}
 
         </div>
 
       </div>
 
-      {/* RECENT PROJECTS */}
+    </div>
+  );
+}
 
-      <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  description,
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
 
-        <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
 
-          <div>
+        <div>
 
-            <h2 className="text-lg font-bold">
-              Recent Projects
-            </h2>
+          <p className="text-sm text-slate-400">
+            {title}
+          </p>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Latest projects added to NEXORA
-            </p>
+          <p className="mt-2 text-3xl font-bold">
+            {value}
+          </p>
 
-          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            {description}
+          </p>
 
-          <button
-            onClick={() => {
-              window.location.href =
-                "/projects";
-            }}
-            className="flex items-center gap-2 text-sm font-medium text-cyan-400 hover:text-cyan-300"
+        </div>
+
+        <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
+          <Icon size={22} />
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
+
+function FinancialCard({
+  title,
+  value,
+  icon: Icon,
+  danger = false,
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-5 ${
+        danger
+          ? "border-red-500/20 bg-red-500/5"
+          : "border-slate-800 bg-slate-900"
+      }`}
+    >
+
+      <div className="flex items-center gap-3">
+
+        <div
+          className={`rounded-xl p-3 ${
+            danger
+              ? "bg-red-500/10 text-red-400"
+              : "bg-cyan-500/10 text-cyan-400"
+          }`}
+        >
+          <Icon size={20} />
+        </div>
+
+        <div>
+
+          <p className="text-sm text-slate-400">
+            {title}
+          </p>
+
+          <p
+            className={`mt-1 text-2xl font-bold ${
+              danger
+                ? "text-red-400"
+                : "text-white"
+            }`}
           >
-            View All
-
-            <ArrowRight size={16} />
-          </button>
+            {value}
+          </p>
 
         </div>
-
-        <div className="mt-5 overflow-x-auto">
-
-          {recentProjects.length === 0 ? (
-
-            <div className="py-8 text-center text-slate-500">
-              No projects available.
-            </div>
-
-          ) : (
-
-            <table className="w-full min-w-[650px] text-left">
-
-              <thead>
-
-                <tr className="border-b border-slate-800 text-xs uppercase text-slate-500">
-
-                  <th className="pb-3">
-                    Project
-                  </th>
-
-                  <th className="pb-3">
-                    Location
-                  </th>
-
-                  <th className="pb-3">
-                    Progress
-                  </th>
-
-                  <th className="pb-3">
-                    Status
-                  </th>
-
-                  <th className="pb-3">
-                    Manager
-                  </th>
-
-                </tr>
-
-              </thead>
-
-              <tbody>
-
-                {recentProjects.map(
-                  (project) => (
-
-                    <tr
-                      key={project.id}
-                      className="border-b border-slate-800/70"
-                    >
-
-                      <td className="py-4">
-
-                        <p className="font-medium text-white">
-                          {project.name}
-                        </p>
-
-                      </td>
-
-                      <td className="py-4 text-sm text-slate-400">
-                        {project.location}
-                      </td>
-
-                      <td className="py-4">
-
-                        <div className="flex items-center gap-3">
-
-                          <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-800">
-
-                            <div
-                              className="h-full rounded-full bg-cyan-500"
-                              style={{
-                                width: `${project.progress}%`,
-                              }}
-                            />
-
-                          </div>
-
-                          <span className="text-xs text-slate-400">
-                            {project.progress}%
-                          </span>
-
-                        </div>
-
-                      </td>
-
-                      <td className="py-4">
-
-                        <span
-                          className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
-                            project.status
-                          )}`}
-                        >
-                          {formatStatus(
-                            project.status
-                          )}
-                        </span>
-
-                      </td>
-
-                      <td className="py-4 text-sm text-slate-400">
-                        {project.manager ||
-                          "Not assigned"}
-                      </td>
-
-                    </tr>
-
-                  )
-                )}
-
-              </tbody>
-
-            </table>
-
-          )}
-
-        </div>
-
-      </div>
-
-      {/* FOOTER */}
-
-      <div className="mt-6 flex flex-col justify-between gap-2 border-t border-slate-800 pt-5 text-xs text-slate-600 md:flex-row">
-
-        <p>
-          NEXORA Smart Infrastructure Monitoring
-          Platform
-        </p>
-
-        <p>
-          Live data • PostgreSQL • Prisma •
-          Express API
-        </p>
 
       </div>
 

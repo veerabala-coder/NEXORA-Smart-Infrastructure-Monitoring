@@ -1,63 +1,83 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   Plus,
   Search,
-  RefreshCw,
-  Pencil,
-  Trash2,
-  X,
-  FolderKanban,
   MapPin,
   CalendarDays,
+  Pencil,
+  Trash2,
+  FolderKanban,
+  X,
+  Eye,
   IndianRupee,
-  ShieldAlert,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 
 import api from "../api/axios.js";
 
+import ProjectDetails from "./ProjectDetails.jsx";
+
 function Projects() {
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [projects, setProjects] =
+    useState([]);
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [search, setSearch] =
+    useState("");
 
-  const [showForm, setShowForm] = useState(false);
-  const [editingProject, setEditingProject] = useState(null);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [showForm, setShowForm] =
+    useState(false);
 
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    location: "",
-    budget: "",
-    progress: 0,
-    status: "ON_TRACK",
-    startDate: "",
-    endDate: "",
-    manager: "",
-  });
+  const [saving, setSaving] =
+    useState(false);
 
-  // ==========================================
-  // USER / ROLE
-  // ==========================================
+  const [editingProject, setEditingProject] =
+    useState(null);
 
-  const user = JSON.parse(
-    localStorage.getItem("nexora_user") || "{}"
-  );
+  const [
+    selectedProjectId,
+    setSelectedProjectId,
+  ] = useState(null);
 
-  const role = user.role || "USER";
+  const [formData, setFormData] =
+    useState({
+      name: "",
+      description: "",
+      location: "",
+      budget: "",
+      amountSpent: "",
+      estimatedFinalCost: "",
+      progress: 0,
+      status: "ON_TRACK",
+      startDate: "",
+      endDate: "",
+      manager: "",
+      issues: "",
+    });
 
-  const canCreate =
-    role === "ADMIN" ||
-    role === "OFFICER" ||
-    role === "CONTRACTOR";
+  const user = useMemo(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem(
+          "nexora_user"
+        ) || "null"
+      );
+    } catch {
+      return null;
+    }
+  }, []);
 
-  const canUpdate =
+  const role = user?.role || "USER";
+
+  const canManage =
     role === "ADMIN" ||
     role === "OFFICER" ||
     role === "CONTRACTOR";
@@ -66,32 +86,42 @@ function Projects() {
     role === "ADMIN" ||
     role === "OFFICER";
 
-  // ==========================================
-  // FETCH PROJECTS
-  // ==========================================
+  // ==================================================
+  // FETCH
+  // ==================================================
 
   const fetchProjects = async () => {
     try {
       setLoading(true);
-      setError("");
 
-      const response = await api.get("/projects");
+      const response =
+        await api.get("/projects");
 
-      setProjects(response.data.projects || []);
-    } catch (err) {
-      console.error("Projects fetch error:", err);
+      setProjects(
+        response.data.projects || []
+      );
 
-      if (err.response?.status === 401) {
-        localStorage.removeItem("nexora_token");
-        localStorage.removeItem("nexora_user");
-        window.location.href = "/login";
-        return;
+    } catch (error) {
+      console.error(
+        "Projects fetch error:",
+        error
+      );
+
+      if (
+        error.response?.status === 401
+      ) {
+        localStorage.removeItem(
+          "nexora_token"
+        );
+
+        localStorage.removeItem(
+          "nexora_user"
+        );
+
+        window.location.href =
+          "/login";
       }
 
-      setError(
-        err.response?.data?.message ||
-          "Failed to load projects."
-      );
     } finally {
       setLoading(false);
     }
@@ -101,312 +131,299 @@ function Projects() {
     fetchProjects();
   }, []);
 
-  // ==========================================
-  // REFRESH
-  // ==========================================
+  // ==================================================
+  // URL PROJECT
+  // ==================================================
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
+  useEffect(() => {
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
 
-    await fetchProjects();
+    const projectId =
+      params.get("project");
 
-    setRefreshing(false);
-  };
+    if (projectId) {
+      setSelectedProjectId(
+        Number(projectId)
+      );
+    }
+  }, []);
 
-  // ==========================================
+  // ==================================================
   // FORM
-  // ==========================================
+  // ==================================================
 
   const resetForm = () => {
-    setForm({
+    setFormData({
       name: "",
       description: "",
       location: "",
       budget: "",
+      amountSpent: "",
+      estimatedFinalCost: "",
       progress: 0,
       status: "ON_TRACK",
       startDate: "",
       endDate: "",
       manager: "",
+      issues: "",
     });
 
     setEditingProject(null);
   };
 
-  const openCreateForm = () => {
-    setError("");
-    setSuccess("");
-    resetForm();
-    setShowForm(true);
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
   };
 
-  const openEditForm = (project) => {
-    setError("");
-    setSuccess("");
+  // ==================================================
+  // CREATE / UPDATE
+  // ==================================================
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!canManage) {
+      alert(
+        "You do not have permission to manage projects."
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const payload = {
+        ...formData,
+
+        budget:
+          formData.budget === ""
+            ? null
+            : Number(formData.budget),
+
+        amountSpent:
+          formData.amountSpent === ""
+            ? null
+            : Number(formData.amountSpent),
+
+        estimatedFinalCost:
+          formData.estimatedFinalCost === ""
+            ? null
+            : Number(
+                formData.estimatedFinalCost
+              ),
+
+        progress: Number(
+          formData.progress
+        ),
+      };
+
+      let response;
+
+      if (editingProject) {
+        response = await api.put(
+          `/projects/${editingProject.id}`,
+          payload
+        );
+      } else {
+        response = await api.post(
+          "/projects",
+          payload
+        );
+      }
+
+      if (
+        response.status >= 200 &&
+        response.status < 300
+      ) {
+        alert(
+          editingProject
+            ? "Project updated successfully!"
+            : "Project created successfully!"
+        );
+
+        setShowForm(false);
+
+        resetForm();
+
+        await fetchProjects();
+      }
+
+    } catch (error) {
+      console.error(
+        "Project save error:",
+        error
+      );
+
+      if (
+        error.response?.status === 403
+      ) {
+        alert(
+          "You do not have permission to perform this action."
+        );
+      } else {
+        alert(
+          error.response?.data?.message ||
+            "Unable to save project."
+        );
+      }
+
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ==================================================
+  // EDIT
+  // ==================================================
+
+  const handleEdit = (project) => {
+    if (!canManage) {
+      alert(
+        "You have view-only access."
+      );
+      return;
+    }
 
     setEditingProject(project);
 
-    setForm({
+    setFormData({
       name: project.name || "",
-      description: project.description || "",
-      location: project.location || "",
-      budget: project.budget ?? "",
-      progress: project.progress ?? 0,
-      status: project.status || "ON_TRACK",
-      startDate: project.startDate
-        ? project.startDate.slice(0, 10)
-        : "",
-      endDate: project.endDate
-        ? project.endDate.slice(0, 10)
-        : "",
-      manager: project.manager || "",
+      description:
+        project.description || "",
+      location:
+        project.location || "",
+
+      budget:
+        project.budget ?? "",
+
+      amountSpent:
+        project.amountSpent ?? "",
+
+      estimatedFinalCost:
+        project.estimatedFinalCost ?? "",
+
+      progress:
+        project.progress ?? 0,
+
+      status:
+        project.status || "ON_TRACK",
+
+      startDate:
+        project.startDate
+          ? new Date(
+              project.startDate
+            )
+              .toISOString()
+              .slice(0, 10)
+          : "",
+
+      endDate:
+        project.endDate
+          ? new Date(
+              project.endDate
+            )
+              .toISOString()
+              .slice(0, 10)
+          : "",
+
+      manager:
+        project.manager || "",
+
+      issues:
+        project.issues || "",
     });
 
     setShowForm(true);
   };
 
-  const closeForm = () => {
-    setShowForm(false);
-    resetForm();
-  };
-
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-  };
-
-  // ==========================================
-  // CREATE / UPDATE
-  // ==========================================
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    setError("");
-    setSuccess("");
-
-    if (!form.name.trim()) {
-      setError("Project name is required.");
-      return;
-    }
-
-    if (!form.location.trim()) {
-      setError("Project location is required.");
-      return;
-    }
-
-    if (!form.startDate || !form.endDate) {
-      setError(
-        "Start date and end date are required."
-      );
-      return;
-    }
-
-    if (
-      new Date(form.endDate) <
-      new Date(form.startDate)
-    ) {
-      setError(
-        "End date cannot be before start date."
-      );
-      return;
-    }
-
-    try {
-      if (editingProject) {
-        await api.put(
-          `/projects/${editingProject.id}`,
-          {
-            name: form.name,
-            description: form.description,
-            location: form.location,
-            budget:
-              form.budget === ""
-                ? null
-                : Number(form.budget),
-            progress: Number(form.progress),
-            status: form.status,
-            startDate: form.startDate,
-            endDate: form.endDate,
-            manager: form.manager,
-          }
-        );
-
-        setSuccess(
-          "Project updated successfully."
-        );
-      } else {
-        await api.post("/projects", {
-          name: form.name,
-          description: form.description,
-          location: form.location,
-          budget:
-            form.budget === ""
-              ? null
-              : Number(form.budget),
-          progress: Number(form.progress),
-          status: form.status,
-          startDate: form.startDate,
-          endDate: form.endDate,
-          manager: form.manager,
-        });
-
-        setSuccess(
-          "Project created successfully."
-        );
-      }
-
-      closeForm();
-      await fetchProjects();
-    } catch (err) {
-      console.error("Project save error:", err);
-
-      if (err.response?.status === 401) {
-        localStorage.removeItem("nexora_token");
-        localStorage.removeItem("nexora_user");
-        window.location.href = "/login";
-        return;
-      }
-
-      if (err.response?.status === 403) {
-        setError(
-          "You do not have permission to perform this action."
-        );
-        return;
-      }
-
-      setError(
-        err.response?.data?.message ||
-          "Failed to save project."
-      );
-    }
-  };
-
-  // ==========================================
+  // ==================================================
   // DELETE
-  // ==========================================
+  // ==================================================
 
   const handleDelete = async (id) => {
     if (!canDelete) {
-      setError(
-        "You do not have permission to delete projects."
+      alert(
+        "Only Admin and Officer can delete projects."
       );
       return;
     }
 
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this project?"
-    );
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to delete this project?"
+      );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
-      setError("");
-      setSuccess("");
-
-      await api.delete(`/projects/${id}`);
-
-      setSuccess(
-        "Project deleted successfully."
+      await api.delete(
+        `/projects/${id}`
       );
 
-      await fetchProjects();
-    } catch (err) {
-      console.error("Delete project error:", err);
+      alert(
+        "Project deleted successfully!"
+      );
 
-      if (err.response?.status === 401) {
-        localStorage.removeItem("nexora_token");
-        localStorage.removeItem("nexora_user");
-        window.location.href = "/login";
-        return;
-      }
+      fetchProjects();
 
-      if (err.response?.status === 403) {
-        setError(
-          "You do not have permission to delete projects."
+    } catch (error) {
+      console.error(
+        "Delete project error:",
+        error
+      );
+
+      if (
+        error.response?.status === 403
+      ) {
+        alert(
+          "You do not have permission to delete this project."
         );
-        return;
+      } else {
+        alert(
+          error.response?.data?.message ||
+            "Failed to delete project."
+        );
       }
+    }
+  };
 
-      setError(
-        err.response?.data?.message ||
-          "Failed to delete project."
+  // ==================================================
+  // SEARCH
+  // ==================================================
+
+  const filteredProjects =
+    useMemo(() => {
+      const text =
+        search.toLowerCase();
+
+      return projects.filter(
+        (project) =>
+          project.name
+            .toLowerCase()
+            .includes(text) ||
+          project.location
+            .toLowerCase()
+            .includes(text) ||
+          (project.manager || "")
+            .toLowerCase()
+            .includes(text)
       );
-    }
-  };
+    }, [projects, search]);
 
-  // ==========================================
-  // FILTER
-  // ==========================================
+  // ==================================================
+  // MONEY
+  // ==================================================
 
-  const filteredProjects = useMemo(() => {
-    return projects.filter((project) => {
-      const searchText = search
-        .toLowerCase()
-        .trim();
-
-      const matchesSearch =
-        !searchText ||
-        project.name
-          ?.toLowerCase()
-          .includes(searchText) ||
-        project.location
-          ?.toLowerCase()
-          .includes(searchText) ||
-        project.manager
-          ?.toLowerCase()
-          .includes(searchText);
-
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        project.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [projects, search, statusFilter]);
-
-  // ==========================================
-  // HELPERS
-  // ==========================================
-
-  const formatStatus = (status) => {
-    return status
-      .replaceAll("_", " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (letter) =>
-        letter.toUpperCase()
-      );
-  };
-
-  const getStatusStyle = (status) => {
-    switch (status) {
-      case "ON_TRACK":
-        return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
-
-      case "AT_RISK":
-        return "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
-
-      case "DELAYED":
-        return "bg-red-500/10 text-red-400 border-red-500/20";
-
-      case "COMPLETED":
-        return "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
-
-      default:
-        return "bg-slate-500/10 text-slate-400 border-slate-500/20";
-    }
-  };
-
-  const formatBudget = (amount) => {
-    if (!amount) {
-      return "₹0";
-    }
+  const formatMoney = (value) => {
+    const amount = Number(
+      value || 0
+    );
 
     if (amount >= 10000000) {
       return `₹${(
@@ -425,32 +442,108 @@ function Projects() {
     )}`;
   };
 
-  // ==========================================
-  // LOADING
-  // ==========================================
+  // ==================================================
+  // STATUS
+  // ==================================================
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 px-6 py-8 text-white lg:px-10">
-        <div className="flex min-h-[70vh] items-center justify-center">
-          <div className="text-center">
-            <RefreshCw
-              size={35}
-              className="mx-auto animate-spin text-cyan-400"
-            />
+  const getStatusStyle = (
+    status
+  ) => {
+    switch (status) {
+      case "ON_TRACK":
+        return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
 
-            <p className="mt-4 text-slate-400">
-              Loading projects...
-            </p>
-          </div>
-        </div>
-      </div>
+      case "AT_RISK":
+        return "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
+
+      case "DELAYED":
+        return "bg-red-500/10 text-red-400 border-red-500/20";
+
+      case "COMPLETED":
+        return "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
+
+      default:
+        return "bg-slate-500/10 text-slate-400 border-slate-500/20";
+    }
+  };
+
+  const formatStatus = (
+    status
+  ) =>
+    String(status || "")
+      .replaceAll("_", " ")
+      .toLowerCase()
+      .replace(
+        /\b\w/g,
+        (letter) =>
+          letter.toUpperCase()
+      );
+
+  // ==================================================
+  // FINANCIAL STATUS
+  // ==================================================
+
+  const getFinancialStatus = (
+    project
+  ) => {
+    const budget = Number(
+      project.budget || 0
     );
-  }
 
-  // ==========================================
-  // MAIN UI
-  // ==========================================
+    const estimated =
+      project.estimatedFinalCost !==
+      null &&
+      project.estimatedFinalCost !==
+        undefined
+        ? Number(
+            project.estimatedFinalCost
+          )
+        : budget;
+
+    if (
+      budget <= 0 ||
+      estimated <= budget
+    ) {
+      return {
+        label: "Within Budget",
+        style:
+          "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
+        funding: 0,
+      };
+    }
+
+    const funding =
+      estimated - budget;
+
+    const percentage =
+      (funding / budget) * 100;
+
+    if (percentage <= 5) {
+      return {
+        label: "Budget Watch",
+        style:
+          "border-yellow-500/20 bg-yellow-500/10 text-yellow-400",
+        funding,
+      };
+    }
+
+    if (percentage <= 15) {
+      return {
+        label: "Funding Risk",
+        style:
+          "border-orange-500/20 bg-orange-500/10 text-orange-400",
+        funding,
+      };
+    }
+
+    return {
+      label:
+        "Critical Funding Required",
+      style:
+        "border-red-500/20 bg-red-500/10 text-red-400",
+      funding,
+    };
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 px-6 py-8 text-white lg:px-10">
@@ -460,8 +553,9 @@ function Projects() {
       <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
 
         <div>
+
           <p className="text-sm font-semibold text-cyan-400">
-            NEXORA MANAGEMENT
+            PROJECT MANAGEMENT
           </p>
 
           <h1 className="mt-2 text-3xl font-bold">
@@ -469,489 +563,562 @@ function Projects() {
           </h1>
 
           <p className="mt-2 text-slate-400">
-            Manage and monitor registered
-            infrastructure projects.
+            Monitor, analyze and manage
+            infrastructure project health.
           </p>
+
         </div>
 
-        <div className="flex gap-3">
-
+        {canManage && (
           <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-medium text-slate-300 transition hover:border-cyan-500 hover:text-cyan-400 disabled:opacity-50"
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+            className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400"
           >
-            <RefreshCw
-              size={17}
-              className={
-                refreshing
-                  ? "animate-spin"
-                  : ""
-              }
-            />
-
-            Refresh
+            <Plus size={19} />
+            Add Project
           </button>
+        )}
 
-          {canCreate && (
-            <button
-              onClick={openCreateForm}
-              className="flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-            >
-              <Plus size={18} />
-              Add Project
-            </button>
-          )}
-
-        </div>
       </div>
 
-      {/* ROLE BADGE */}
+      {/* ROLE */}
 
-      <div className="mt-6 flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
-        <ShieldAlert
-          size={18}
-          className="text-cyan-400"
+      <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900 px-5 py-4">
+
+        <span className="text-sm text-slate-400">
+          Current role:
+        </span>
+
+        <span className="ml-2 font-bold text-cyan-400">
+          {role}
+        </span>
+
+        <span className="ml-3 text-xs text-slate-500">
+          {canManage
+            ? "Management access"
+            : "View-only access"}
+        </span>
+
+      </div>
+
+      {/* SEARCH */}
+
+      <div className="mt-6 flex max-w-xl items-center rounded-xl border border-slate-800 bg-slate-900">
+
+        <Search
+          size={19}
+          className="ml-4 text-slate-500"
         />
 
-        <p className="text-sm text-slate-400">
-          Current role:
-          <span className="ml-2 font-semibold text-cyan-400">
-            {role}
-          </span>
-        </p>
-
-        {!canCreate && (
-          <span className="text-xs text-slate-500">
-            View-only access
-          </span>
-        )}
-      </div>
-
-      {/* MESSAGES */}
-
-      {error && (
-        <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
-          {success}
-        </div>
-      )}
-
-      {/* SEARCH + FILTER */}
-
-      <div className="mt-6 flex flex-col gap-3 md:flex-row">
-
-        <div className="relative flex-1">
-          <Search
-            size={18}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
-          />
-
-          <input
-            type="text"
-            placeholder="Search projects, locations or managers..."
-            value={search}
-            onChange={(event) =>
-              setSearch(event.target.value)
-            }
-            className="w-full rounded-xl border border-slate-800 bg-slate-900 py-3 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-500"
-          />
-        </div>
-
-        <select
-          value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value)
+        <input
+          type="text"
+          placeholder="Search projects, locations or managers..."
+          value={search}
+          onChange={(e) =>
+            setSearch(e.target.value)
           }
-          className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-300 outline-none focus:border-cyan-500"
-        >
-          <option value="ALL">
-            All Status
-          </option>
-
-          <option value="ON_TRACK">
-            On Track
-          </option>
-
-          <option value="AT_RISK">
-            At Risk
-          </option>
-
-          <option value="DELAYED">
-            Delayed
-          </option>
-
-          <option value="COMPLETED">
-            Completed
-          </option>
-        </select>
+          className="w-full bg-transparent px-3 py-3 text-white outline-none placeholder:text-slate-600"
+        />
 
       </div>
 
-      {/* PROJECT COUNT */}
+      {/* COUNT */}
 
-      <div className="mt-5 flex items-center justify-between">
-        <p className="text-sm text-slate-500">
-          Showing{" "}
-          <span className="font-semibold text-slate-300">
-            {filteredProjects.length}
-          </span>{" "}
-          of{" "}
-          <span className="font-semibold text-slate-300">
-            {projects.length}
-          </span>{" "}
-          projects
-        </p>
+      <div className="mt-5 flex items-center gap-2 text-sm text-slate-400">
+
+        <FolderKanban size={17} />
+
+        Showing{" "}
+        <span className="font-semibold text-white">
+          {filteredProjects.length}
+        </span>{" "}
+        of{" "}
+        <span className="font-semibold text-white">
+          {projects.length}
+        </span>{" "}
+        projects
+
       </div>
 
-      {/* PROJECT CARDS */}
+      {/* PROJECTS */}
 
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
 
-        {filteredProjects.length === 0 ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center xl:col-span-2">
+        {loading ? (
 
-            <FolderKanban
-              size={40}
-              className="mx-auto text-slate-600"
-            />
-
-            <p className="mt-4 font-medium text-slate-300">
-              No projects found
-            </p>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Try changing your search or
-              status filter.
-            </p>
-
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-slate-400">
+            Loading projects...
           </div>
+
+        ) : filteredProjects.length ===
+          0 ? (
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-slate-400">
+            No projects found.
+          </div>
+
         ) : (
-          filteredProjects.map((project) => (
-            <div
-              key={project.id}
-              className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg transition hover:border-cyan-500/30"
-            >
 
-              {/* CARD HEADER */}
+          filteredProjects.map(
+            (project) => {
 
-              <div className="flex items-start justify-between gap-4">
+              const financial =
+                getFinancialStatus(
+                  project
+                );
 
-                <div className="flex gap-4">
-
-                  <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
-                    <FolderKanban size={22} />
-                  </div>
-
-                  <div>
-                    <h2 className="font-bold text-white">
-                      {project.name}
-                    </h2>
-
-                    <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
-                      <MapPin size={13} />
-                      {project.location}
-                    </div>
-                  </div>
-
-                </div>
-
-                <span
-                  className={`whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
-                    project.status
-                  )}`}
+              return (
+                <div
+                  key={project.id}
+                  className="rounded-2xl border border-slate-800 bg-slate-900 p-6 transition hover:border-cyan-500/40"
                 >
-                  {formatStatus(
-                    project.status
-                  )}
-                </span>
 
-              </div>
+                  {/* TITLE */}
 
-              {/* DESCRIPTION */}
+                  <div className="flex items-start justify-between gap-4">
 
-              {project.description && (
-                <p className="mt-5 text-sm leading-6 text-slate-400">
-                  {project.description}
-                </p>
-              )}
+                    <div>
 
-              {/* PROGRESS */}
+                      <h2 className="text-xl font-bold">
+                        {project.name}
+                      </h2>
 
-              <div className="mt-6">
+                      <p className="mt-2 text-sm leading-6 text-slate-400">
+                        {project.description ||
+                          "No description available."}
+                      </p>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">
-                    Project Progress
-                  </span>
+                    </div>
 
-                  <span className="text-sm font-bold text-cyan-400">
-                    {project.progress}%
-                  </span>
-                </div>
+                    <span
+                      className={`whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
+                        project.status
+                      )}`}
+                    >
+                      {formatStatus(
+                        project.status
+                      )}
+                    </span>
 
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className="h-full rounded-full bg-cyan-500 transition-all"
-                    style={{
-                      width: `${project.progress}%`,
-                    }}
-                  />
-                </div>
-
-              </div>
-
-              {/* DETAILS */}
-
-              <div className="mt-6 grid grid-cols-2 gap-4">
-
-                <div className="rounded-xl bg-slate-950/60 p-3">
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <IndianRupee size={14} />
-                    Budget
                   </div>
 
-                  <p className="mt-1 font-semibold text-slate-200">
-                    {formatBudget(
-                      Number(project.budget || 0)
+                  {/* LOCATION */}
+
+                  <div className="mt-5 flex items-center gap-2 text-sm text-slate-400">
+
+                    <MapPin
+                      size={17}
+                      className="text-cyan-400"
+                    />
+
+                    {project.location}
+
+                  </div>
+
+                  {/* DATES */}
+
+                  <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+
+                    <CalendarDays
+                      size={17}
+                      className="text-cyan-400"
+                    />
+
+                    {new Date(
+                      project.startDate
+                    ).toLocaleDateString(
+                      "en-IN"
                     )}
-                  </p>
-                </div>
 
-                <div className="rounded-xl bg-slate-950/60 p-3">
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <CalendarDays size={14} />
-                    End Date
-                  </div>
+                    {" → "}
 
-                  <p className="mt-1 font-semibold text-slate-200">
                     {new Date(
                       project.endDate
-                    ).toLocaleDateString()}
-                  </p>
+                    ).toLocaleDateString(
+                      "en-IN"
+                    )}
+
+                  </div>
+
+                  {/* PROGRESS */}
+
+                  <div className="mt-6">
+
+                    <div className="mb-2 flex justify-between text-sm">
+
+                      <span className="text-slate-400">
+                        Project Progress
+                      </span>
+
+                      <span className="font-semibold text-cyan-400">
+                        {project.progress}%
+                      </span>
+
+                    </div>
+
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+
+                      <div
+                        className="h-full rounded-full bg-cyan-500"
+                        style={{
+                          width: `${project.progress}%`,
+                        }}
+                      />
+
+                    </div>
+
+                  </div>
+
+                  {/* FINANCIAL */}
+
+                  <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950 p-4">
+
+                    <div className="flex items-center gap-2">
+
+                      <IndianRupee
+                        size={17}
+                        className="text-cyan-400"
+                      />
+
+                      <span className="text-xs text-slate-500">
+                        Approved Budget
+                      </span>
+
+                      <span className="ml-auto font-semibold">
+                        {formatMoney(
+                          project.budget
+                        )}
+                      </span>
+
+                    </div>
+
+                    <div className="mt-3">
+
+                      {financial.funding >
+                      0 ? (
+
+                        <div className="flex items-center gap-2 text-sm font-semibold text-red-400">
+
+                          <AlertTriangle
+                            size={17}
+                          />
+
+                          🚨{" "}
+                          {formatMoney(
+                            financial.funding
+                          )}{" "}
+                          Additional Funding Required
+
+                        </div>
+
+                      ) : (
+
+                        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
+
+                          <CheckCircle2
+                            size={17}
+                          />
+
+                          🟢 Within Budget
+
+                        </div>
+
+                      )}
+
+                    </div>
+
+                  </div>
+
+                  {/* MANAGER + ACTIONS */}
+
+                  <div className="mt-6 flex flex-col gap-4 border-t border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
+
+                    <div>
+
+                      <p className="text-xs text-slate-500">
+                        Project Manager
+                      </p>
+
+                      <p className="mt-1 text-sm font-medium text-slate-300">
+                        {project.manager ||
+                          "Not assigned"}
+                      </p>
+
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+
+                      <button
+                        onClick={() =>
+                          setSelectedProjectId(
+                            project.id
+                          )
+                        }
+                        className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
+                      >
+                        <Eye size={16} />
+                        View Details
+                      </button>
+
+                      {canManage && (
+                        <button
+                          onClick={() =>
+                            handleEdit(
+                              project
+                            )
+                          }
+                          className="rounded-lg border border-slate-700 p-2 text-slate-400 hover:border-cyan-500 hover:text-cyan-400"
+                          title="Edit project"
+                        >
+                          <Pencil size={17} />
+                        </button>
+                      )}
+
+                      {canDelete && (
+                        <button
+                          onClick={() =>
+                            handleDelete(
+                              project.id
+                            )
+                          }
+                          className="rounded-lg border border-slate-700 p-2 text-slate-400 hover:border-red-500 hover:text-red-400"
+                          title="Delete project"
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      )}
+
+                    </div>
+
+                  </div>
+
                 </div>
+              );
+            }
+          )
 
-              </div>
-
-              {/* MANAGER */}
-
-              <div className="mt-4 text-xs text-slate-500">
-                Manager:{" "}
-                <span className="text-slate-300">
-                  {project.manager ||
-                    "Not assigned"}
-                </span>
-              </div>
-
-              {/* ACTIONS */}
-
-              {(canUpdate || canDelete) && (
-                <div className="mt-6 flex justify-end gap-3 border-t border-slate-800 pt-5">
-
-                  {canUpdate && (
-                    <button
-                      onClick={() =>
-                        openEditForm(project)
-                      }
-                      className="flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-500 hover:text-cyan-400"
-                    >
-                      <Pencil size={15} />
-                      Edit
-                    </button>
-                  )}
-
-                  {canDelete && (
-                    <button
-                      onClick={() =>
-                        handleDelete(project.id)
-                      }
-                      className="flex items-center gap-2 rounded-lg border border-red-500/20 px-4 py-2 text-xs font-medium text-red-400 transition hover:bg-red-500/10"
-                    >
-                      <Trash2 size={15} />
-                      Delete
-                    </button>
-                  )}
-
-                </div>
-              )}
-
-            </div>
-          ))
         )}
 
       </div>
 
-      {/* ==========================================
-          PROJECT FORM MODAL
-      ========================================== */}
+      {/* FORM */}
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-5">
 
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
 
-            {/* MODAL HEADER */}
-
-            <div className="sticky top-0 flex items-center justify-between border-b border-slate-800 bg-slate-900 px-6 py-5">
+            <div className="flex items-center justify-between">
 
               <div>
-                <h2 className="text-xl font-bold text-white">
+
+                <p className="text-sm font-semibold text-cyan-400">
+                  PROJECT MANAGEMENT
+                </p>
+
+                <h2 className="mt-1 text-2xl font-bold">
                   {editingProject
                     ? "Edit Project"
-                    : "Create Project"}
+                    : "Add New Project"}
                 </h2>
 
-                <p className="mt-1 text-xs text-slate-500">
-                  Enter infrastructure project
-                  information.
-                </p>
               </div>
 
               <button
-                onClick={closeForm}
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                onClick={() => {
+                  setShowForm(false);
+                  resetForm();
+                }}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
               >
-                <X size={20} />
+                <X size={21} />
               </button>
 
             </div>
 
-            {/* FORM */}
-
             <form
               onSubmit={handleSubmit}
-              className="space-y-5 p-6"
+              className="mt-6 space-y-5"
             >
 
-              <div className="grid gap-5 md:grid-cols-2">
+              <div>
 
-                {/* NAME */}
+                <label className="mb-2 block text-sm text-slate-300">
+                  Project Name *
+                </label>
 
-                <div>
-                  <label className="mb-2 block text-sm text-slate-400">
-                    Project Name *
-                  </label>
-
-                  <input
-                    name="name"
-                    value={form.name}
-                    onChange={handleChange}
-                    placeholder="Enter project name"
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                {/* LOCATION */}
-
-                <div>
-                  <label className="mb-2 block text-sm text-slate-400">
-                    Location *
-                  </label>
-
-                  <input
-                    name="location"
-                    value={form.location}
-                    onChange={handleChange}
-                    placeholder="Enter location"
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-500"
-                  />
-                </div>
+                <input
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
+                />
 
               </div>
 
-              {/* DESCRIPTION */}
-
               <div>
-                <label className="mb-2 block text-sm text-slate-400">
+
+                <label className="mb-2 block text-sm text-slate-300">
                   Description
                 </label>
 
                 <textarea
                   name="description"
-                  value={form.description}
+                  value={
+                    formData.description
+                  }
                   onChange={handleChange}
                   rows="3"
-                  placeholder="Describe the project..."
-                  className="w-full resize-none rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-500"
+                  className="w-full resize-none rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
                 />
+
+              </div>
+
+              <div>
+
+                <label className="mb-2 block text-sm text-slate-300">
+                  Location *
+                </label>
+
+                <input
+                  name="location"
+                  value={formData.location}
+                  onChange={handleChange}
+                  required
+                  placeholder="Example: Cuddalore, Tamil Nadu"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
+                />
+
+              </div>
+
+              {/* FINANCIAL */}
+
+              <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5">
+
+                <div className="mb-4 flex items-center gap-2">
+
+                  <IndianRupee
+                    size={19}
+                    className="text-cyan-400"
+                  />
+
+                  <h3 className="font-semibold">
+                    Financial Monitoring
+                  </h3>
+
+                </div>
+
+                <div className="grid gap-5 md:grid-cols-3">
+
+                  <div>
+
+                    <label className="mb-2 block text-xs text-slate-400">
+                      Approved Budget
+                    </label>
+
+                    <input
+                      type="number"
+                      name="budget"
+                      value={formData.budget}
+                      onChange={handleChange}
+                      min="0"
+                      placeholder="240000000"
+                      className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
+                    />
+
+                  </div>
+
+                  <div>
+
+                    <label className="mb-2 block text-xs text-slate-400">
+                      Amount Spent
+                    </label>
+
+                    <input
+                      type="number"
+                      name="amountSpent"
+                      value={
+                        formData.amountSpent
+                      }
+                      onChange={handleChange}
+                      min="0"
+                      placeholder="185000000"
+                      className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
+                    />
+
+                  </div>
+
+                  <div>
+
+                    <label className="mb-2 block text-xs text-slate-400">
+                      Estimated Final Cost
+                    </label>
+
+                    <input
+                      type="number"
+                      name="estimatedFinalCost"
+                      value={
+                        formData.estimatedFinalCost
+                      }
+                      onChange={handleChange}
+                      min="0"
+                      placeholder="275000000"
+                      className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
+                    />
+
+                  </div>
+
+                </div>
+
+                <p className="mt-3 text-xs text-slate-500">
+                  NEXORA automatically calculates
+                  additional funding and financial
+                  risk from these values.
+                </p>
+
               </div>
 
               <div className="grid gap-5 md:grid-cols-2">
 
-                {/* BUDGET */}
-
                 <div>
-                  <label className="mb-2 block text-sm text-slate-400">
-                    Budget (₹)
-                  </label>
 
-                  <input
-                    type="number"
-                    name="budget"
-                    value={form.budget}
-                    onChange={handleChange}
-                    placeholder="5000000"
-                    min="0"
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                {/* MANAGER */}
-
-                <div>
-                  <label className="mb-2 block text-sm text-slate-400">
-                    Manager
-                  </label>
-
-                  <input
-                    name="manager"
-                    value={form.manager}
-                    onChange={handleChange}
-                    placeholder="Manager name"
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-              </div>
-
-              <div className="grid gap-5 md:grid-cols-3">
-
-                {/* PROGRESS */}
-
-                <div>
-                  <label className="mb-2 block text-sm text-slate-400">
+                  <label className="mb-2 block text-sm text-slate-300">
                     Progress (%)
                   </label>
 
                   <input
                     type="number"
                     name="progress"
-                    value={form.progress}
+                    value={
+                      formData.progress
+                    }
                     onChange={handleChange}
                     min="0"
                     max="100"
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-500"
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
                   />
+
                 </div>
 
-                {/* STATUS */}
-
                 <div>
-                  <label className="mb-2 block text-sm text-slate-400">
-                    Status
+
+                  <label className="mb-2 block text-sm text-slate-300">
+                    Operational Status
                   </label>
 
                   <select
                     name="status"
-                    value={form.status}
+                    value={
+                      formData.status
+                    }
                     onChange={handleChange}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-300 outline-none focus:border-cyan-500"
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
                   >
+
                     <option value="ON_TRACK">
                       On Track
                     </option>
@@ -967,64 +1134,113 @@ function Projects() {
                     <option value="COMPLETED">
                       Completed
                     </option>
+
                   </select>
+
                 </div>
 
-                <div />
-
               </div>
-
-              {/* DATES */}
 
               <div className="grid gap-5 md:grid-cols-2">
 
                 <div>
-                  <label className="mb-2 block text-sm text-slate-400">
+
+                  <label className="mb-2 block text-sm text-slate-300">
                     Start Date *
                   </label>
 
                   <input
                     type="date"
                     name="startDate"
-                    value={form.startDate}
+                    value={
+                      formData.startDate
+                    }
                     onChange={handleChange}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-500"
+                    required
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
                   />
+
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm text-slate-400">
-                    End Date *
+
+                  <label className="mb-2 block text-sm text-slate-300">
+                    Expected Completion *
                   </label>
 
                   <input
                     type="date"
                     name="endDate"
-                    value={form.endDate}
+                    value={
+                      formData.endDate
+                    }
                     onChange={handleChange}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-500"
+                    required
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
                   />
+
                 </div>
 
               </div>
 
-              {/* BUTTONS */}
+              <div>
+
+                <label className="mb-2 block text-sm text-slate-300">
+                  Project Manager
+                </label>
+
+                <input
+                  name="manager"
+                  value={
+                    formData.manager
+                  }
+                  onChange={handleChange}
+                  placeholder="Example: Cuddalore Municipal Corporation"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
+                />
+
+              </div>
+
+              <div>
+
+                <label className="mb-2 block text-sm text-slate-300">
+                  Current Issues
+                </label>
+
+                <textarea
+                  name="issues"
+                  value={
+                    formData.issues
+                  }
+                  onChange={handleChange}
+                  rows="3"
+                  placeholder="Example: Material cost increase..."
+                  className="w-full resize-none rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-500"
+                />
+
+              </div>
 
               <div className="flex justify-end gap-3 border-t border-slate-800 pt-5">
 
                 <button
                   type="button"
-                  onClick={closeForm}
-                  className="rounded-xl border border-slate-700 px-5 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800"
+                  onClick={() => {
+                    setShowForm(false);
+                    resetForm();
+                  }}
+                  className="rounded-xl border border-slate-700 px-5 py-3 font-medium text-slate-300 hover:bg-slate-800"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                  disabled={saving}
+                  className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
                 >
-                  {editingProject
+                  {saving
+                    ? "Saving..."
+                    : editingProject
                     ? "Update Project"
                     : "Create Project"}
                 </button>
@@ -1034,7 +1250,29 @@ function Projects() {
             </form>
 
           </div>
+
         </div>
+      )}
+
+      {/* DETAILS */}
+
+      {selectedProjectId && (
+        <ProjectDetails
+          projectId={
+            selectedProjectId
+          }
+          onClose={() => {
+            setSelectedProjectId(
+              null
+            );
+
+            window.history.replaceState(
+              {},
+              "",
+              "/projects"
+            );
+          }}
+        />
       )}
 
     </div>

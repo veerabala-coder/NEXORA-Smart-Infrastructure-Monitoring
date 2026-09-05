@@ -1,6 +1,7 @@
 import express from "express";
 import "dotenv/config";
 import pg from "pg";
+
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
@@ -8,6 +9,8 @@ import {
   authenticateToken,
   authorizeRoles,
 } from "../middleware/authMiddleware.js";
+
+const router = express.Router();
 
 const { Pool } = pg;
 
@@ -21,18 +24,123 @@ const prisma = new PrismaClient({
   adapter,
 });
 
-const router = express.Router();
+// ======================================================
+// FINANCIAL / RISK CALCULATION
+// ======================================================
 
+function enrichProject(project) {
+  const approvedBudget = Number(project.budget || 0);
 
-// =====================================================
+  const amountSpent = Number(
+    project.amountSpent || 0
+  );
+
+  const estimatedFinalCost =
+    project.estimatedFinalCost !== null &&
+    project.estimatedFinalCost !== undefined
+      ? Number(project.estimatedFinalCost)
+      : approvedBudget;
+
+  const remainingBudget =
+    approvedBudget - amountSpent;
+
+  const additionalFunding = Math.max(
+    estimatedFinalCost - approvedBudget,
+    0
+  );
+
+  const overrunPercentage =
+    approvedBudget > 0
+      ? (additionalFunding / approvedBudget) * 100
+      : 0;
+
+  let financialStatus = "WITHIN_BUDGET";
+
+  if (additionalFunding <= 0) {
+    financialStatus = "WITHIN_BUDGET";
+  } else if (overrunPercentage <= 5) {
+    financialStatus = "BUDGET_WATCH";
+  } else if (overrunPercentage <= 15) {
+    financialStatus = "FUNDING_RISK";
+  } else {
+    financialStatus = "CRITICAL_FUNDING_REQUIRED";
+  }
+
+  const budgetUtilization =
+    approvedBudget > 0
+      ? (amountSpent / approvedBudget) * 100
+      : 0;
+
+  let riskLevel = "LOW";
+
+  if (financialStatus === "CRITICAL_FUNDING_REQUIRED") {
+    riskLevel = "CRITICAL";
+  } else if (
+    financialStatus === "FUNDING_RISK"
+  ) {
+    riskLevel = "HIGH";
+  } else if (
+    project.status === "DELAYED"
+  ) {
+    riskLevel = "HIGH";
+  } else if (
+    project.status === "AT_RISK" ||
+    financialStatus === "BUDGET_WATCH" ||
+    Number(project.progress || 0) < 30
+  ) {
+    riskLevel = "MEDIUM";
+  }
+
+  return {
+    ...project,
+
+    approvedBudget,
+
+    amountSpent,
+
+    estimatedFinalCost,
+
+    remainingBudget,
+
+    additionalFunding,
+
+    overrunPercentage: Number(
+      overrunPercentage.toFixed(2)
+    ),
+
+    budgetUtilization: Number(
+      budgetUtilization.toFixed(2)
+    ),
+
+    financialStatus,
+
+    riskLevel,
+
+    fundingRequired:
+      additionalFunding > 0,
+  };
+}
+
+// ======================================================
+// NORMALIZE JSON DATA
+// ======================================================
+
+function normalizeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+// ======================================================
 // CREATE PROJECT
-// POST /api/projects
-// =====================================================
+// ======================================================
 
 router.post(
   "/",
   authenticateToken,
-  authorizeRoles("ADMIN", "OFFICER", "CONTRACTOR"),
+  authorizeRoles(
+    "ADMIN",
+    "OFFICER",
+    "CONTRACTOR"
+  ),
   async (req, res) => {
     try {
       const {
@@ -40,102 +148,147 @@ router.post(
         description,
         location,
         budget,
+        amountSpent,
+        estimatedFinalCost,
         progress,
         status,
         startDate,
         endDate,
         manager,
-      } = req.body || {};
+        issues,
+        milestones,
+        risks,
+        activities,
+      } = req.body;
 
-      if (!name || !location || !startDate || !endDate) {
+      if (
+        !name ||
+        !location ||
+        !startDate ||
+        !endDate
+      ) {
         return res.status(400).json({
           message:
-            "Name, location, start date and end date are required",
+            "Name, location, start date and end date are required.",
         });
       }
 
       const project = await prisma.project.create({
         data: {
           name,
-          description: description || null,
+          description:
+            description || null,
+
           location,
+
           budget:
-            budget !== undefined &&
             budget !== null &&
+            budget !== undefined &&
             budget !== ""
               ? Number(budget)
               : null,
 
-          progress:
-            progress !== undefined &&
-            progress !== null &&
-            progress !== ""
-              ? Number(progress)
-              : 0,
+          amountSpent:
+            amountSpent !== null &&
+            amountSpent !== undefined &&
+            amountSpent !== ""
+              ? Number(amountSpent)
+              : null,
 
-          status: status || "ON_TRACK",
+          estimatedFinalCost:
+            estimatedFinalCost !== null &&
+            estimatedFinalCost !== undefined &&
+            estimatedFinalCost !== ""
+              ? Number(estimatedFinalCost)
+              : null,
+
+          progress: Math.max(
+            0,
+            Math.min(
+              100,
+              Number(progress || 0)
+            )
+          ),
+
+          status:
+            status || "ON_TRACK",
 
           startDate: new Date(startDate),
 
           endDate: new Date(endDate),
 
-          manager: manager || null,
+          manager:
+            manager || null,
+
+          issues:
+            issues || null,
+
+          milestones:
+            normalizeArray(milestones),
+
+          risks:
+            normalizeArray(risks),
+
+          activities:
+            normalizeArray(activities),
         },
       });
 
-      return res.status(201).json({
-        message: "Project created successfully",
-        project,
+      res.status(201).json({
+        message: "Project created successfully.",
+        project: enrichProject(project),
       });
-
     } catch (error) {
-      console.error("Create project error:", error);
+      console.error(
+        "Create project error:",
+        error
+      );
 
-      return res.status(500).json({
-        message: "Failed to create project",
+      res.status(500).json({
+        message: "Failed to create project.",
         error: error.message,
       });
     }
   }
 );
 
-
-// =====================================================
+// ======================================================
 // GET ALL PROJECTS
-// GET /api/projects
-// =====================================================
+// ======================================================
 
 router.get(
   "/",
   authenticateToken,
   async (req, res) => {
     try {
-      const projects = await prisma.project.findMany({
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+      const projects =
+        await prisma.project.findMany({
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
 
-      return res.status(200).json({
-        projects,
+      res.json({
+        projects:
+          projects.map(enrichProject),
       });
-
     } catch (error) {
-      console.error("Get projects error:", error);
+      console.error(
+        "Get projects error:",
+        error
+      );
 
-      return res.status(500).json({
-        message: "Failed to fetch projects",
+      res.status(500).json({
+        message: "Failed to fetch projects.",
         error: error.message,
       });
     }
   }
 );
 
-
-// =====================================================
+// ======================================================
 // GET SINGLE PROJECT
-// GET /api/projects/:id
-// =====================================================
+// ======================================================
 
 router.get(
   "/:id",
@@ -146,54 +299,68 @@ router.get(
 
       if (!Number.isInteger(id)) {
         return res.status(400).json({
-          message: "Invalid project ID",
+          message: "Invalid project ID.",
         });
       }
 
-      const project = await prisma.project.findUnique({
-        where: {
-          id,
-        },
-      });
+      const project =
+        await prisma.project.findUnique({
+          where: { id },
+        });
 
       if (!project) {
         return res.status(404).json({
-          message: "Project not found",
+          message: "Project not found.",
         });
       }
 
-      return res.status(200).json({
-        project,
+      res.json({
+        project: enrichProject(project),
       });
-
     } catch (error) {
-      console.error("Get project error:", error);
+      console.error(
+        "Get project error:",
+        error
+      );
 
-      return res.status(500).json({
-        message: "Failed to fetch project",
+      res.status(500).json({
+        message: "Failed to fetch project.",
         error: error.message,
       });
     }
   }
 );
 
-
-// =====================================================
+// ======================================================
 // UPDATE PROJECT
-// PUT /api/projects/:id
-// =====================================================
+// ======================================================
 
 router.put(
   "/:id",
   authenticateToken,
-  authorizeRoles("ADMIN", "OFFICER", "CONTRACTOR"),
+  authorizeRoles(
+    "ADMIN",
+    "OFFICER",
+    "CONTRACTOR"
+  ),
   async (req, res) => {
     try {
       const id = Number(req.params.id);
 
       if (!Number.isInteger(id)) {
         return res.status(400).json({
-          message: "Invalid project ID",
+          message: "Invalid project ID.",
+        });
+      }
+
+      const existing =
+        await prisma.project.findUnique({
+          where: { id },
+        });
+
+      if (!existing) {
+        return res.status(404).json({
+          message: "Project not found.",
         });
       }
 
@@ -202,116 +369,188 @@ router.put(
         description,
         location,
         budget,
+        amountSpent,
+        estimatedFinalCost,
         progress,
         status,
         startDate,
         endDate,
         manager,
-      } = req.body || {};
+        issues,
+        milestones,
+        risks,
+        activities,
+      } = req.body;
 
-      const project = await prisma.project.update({
-        where: {
-          id,
-        },
+      const project =
+        await prisma.project.update({
+          where: { id },
 
-        data: {
-          ...(name !== undefined && {
-            name,
-          }),
+          data: {
+            name:
+              name !== undefined
+                ? name
+                : existing.name,
 
-          ...(description !== undefined && {
-            description,
-          }),
+            description:
+              description !== undefined
+                ? description
+                : existing.description,
 
-          ...(location !== undefined && {
-            location,
-          }),
+            location:
+              location !== undefined
+                ? location
+                : existing.location,
 
-          ...(budget !== undefined && {
             budget:
-              budget === null || budget === ""
-                ? null
-                : Number(budget),
-          }),
+              budget !== undefined
+                ? budget === null ||
+                  budget === ""
+                  ? null
+                  : Number(budget)
+                : existing.budget,
 
-          ...(progress !== undefined && {
-            progress: Number(progress),
-          }),
+            amountSpent:
+              amountSpent !== undefined
+                ? amountSpent === null ||
+                  amountSpent === ""
+                  ? null
+                  : Number(amountSpent)
+                : existing.amountSpent,
 
-          ...(status !== undefined && {
-            status,
-          }),
+            estimatedFinalCost:
+              estimatedFinalCost !== undefined
+                ? estimatedFinalCost === null ||
+                  estimatedFinalCost === ""
+                  ? null
+                  : Number(
+                      estimatedFinalCost
+                    )
+                : existing.estimatedFinalCost,
 
-          ...(startDate !== undefined && {
-            startDate: new Date(startDate),
-          }),
+            progress:
+              progress !== undefined
+                ? Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      Number(progress)
+                    )
+                  )
+                : existing.progress,
 
-          ...(endDate !== undefined && {
-            endDate: new Date(endDate),
-          }),
+            status:
+              status !== undefined
+                ? status
+                : existing.status,
 
-          ...(manager !== undefined && {
-            manager,
-          }),
-        },
+            startDate:
+              startDate !== undefined
+                ? new Date(startDate)
+                : existing.startDate,
+
+            endDate:
+              endDate !== undefined
+                ? new Date(endDate)
+                : existing.endDate,
+
+            manager:
+              manager !== undefined
+                ? manager || null
+                : existing.manager,
+
+            issues:
+              issues !== undefined
+                ? issues || null
+                : existing.issues,
+
+            milestones:
+              milestones !== undefined
+                ? normalizeArray(milestones)
+                : existing.milestones,
+
+            risks:
+              risks !== undefined
+                ? normalizeArray(risks)
+                : existing.risks,
+
+            activities:
+              activities !== undefined
+                ? normalizeArray(activities)
+                : existing.activities,
+          },
+        });
+
+      res.json({
+        message: "Project updated successfully.",
+        project: enrichProject(project),
       });
-
-      return res.status(200).json({
-        message: "Project updated successfully",
-        project,
-      });
-
     } catch (error) {
-      console.error("Update project error:", error);
+      console.error(
+        "Update project error:",
+        error
+      );
 
-      return res.status(500).json({
-        message: "Failed to update project",
+      res.status(500).json({
+        message: "Failed to update project.",
         error: error.message,
       });
     }
   }
 );
 
-
-// =====================================================
+// ======================================================
 // DELETE PROJECT
-// DELETE /api/projects/:id
-// =====================================================
+// ======================================================
 
 router.delete(
   "/:id",
   authenticateToken,
-  authorizeRoles("ADMIN", "OFFICER"),
+  authorizeRoles(
+    "ADMIN",
+    "OFFICER"
+  ),
   async (req, res) => {
     try {
       const id = Number(req.params.id);
 
       if (!Number.isInteger(id)) {
         return res.status(400).json({
-          message: "Invalid project ID",
+          message: "Invalid project ID.",
+        });
+      }
+
+      const existing =
+        await prisma.project.findUnique({
+          where: { id },
+        });
+
+      if (!existing) {
+        return res.status(404).json({
+          message: "Project not found.",
         });
       }
 
       await prisma.project.delete({
-        where: {
-          id,
-        },
+        where: { id },
       });
 
-      return res.status(200).json({
-        message: "Project deleted successfully",
+      res.json({
+        message:
+          "Project deleted successfully.",
       });
-
     } catch (error) {
-      console.error("Delete project error:", error);
+      console.error(
+        "Delete project error:",
+        error
+      );
 
-      return res.status(500).json({
-        message: "Failed to delete project",
+      res.status(500).json({
+        message: "Failed to delete project.",
         error: error.message,
       });
     }
   }
 );
-
 
 export default router;
